@@ -8,11 +8,11 @@ use quicksilver::{
     load_file,
 };
 
-const WIDTH : f32  = 800f32;
-const UWIDTH : usize = 800;
-const ROWLEN : usize = 3200;
-const HEIGHT : f32 = 800f32 as f32;
-const UHEIGHT : usize = 800;
+const WIDTH : f32  = 512f32;
+const UWIDTH : usize = 512;
+const ROWLEN : usize = 2048;
+const HEIGHT : f32 = 512f32 as f32;
+const UHEIGHT : usize = 512;
 
 const HRSPEED : f32 = 0.05f32 as f32;
 const VRSPEED : f32 = 0.02f32 as f32;
@@ -199,7 +199,7 @@ impl FdfMap {
             let fy = self.settings.center.y - (y as f32) / height;
             let theta = self.settings.angles.0;
             let phi = self.settings.angles.1;
-            let k = 1f32 + (fx * theta.sin() + fy * theta.cos() *
+            let k = 1f32 + ((fx * theta.sin() + fy * theta.cos()) *
                     phi.cos() + self.settings.dist) / CAM2SCREEN;
             let w_shift = (fx * theta.cos() - fy * theta.sin()) / k;
             let h_shift = ((fx * theta.sin() + fy * theta.cos()) * phi.sin() +
