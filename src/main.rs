@@ -1,22 +1,21 @@
 use quicksilver::{
-    Result,
     combinators::*,
     geom::{Shape, Vector},
-    graphics::{Background::Img, Image, Color, PixelFormat},
-    lifecycle::{Asset, Settings, State, Window, Event, run},
-    input::{Key, MouseButton, ButtonState},
-    load_file,
+    graphics::{Background::Img, Color, Image, PixelFormat},
+    input::{ButtonState, Key, MouseButton},
+    lifecycle::{run, Asset, Event, Settings, State, Window},
+    load_file, Result,
 };
 
-const WIDTH : f32  = 512f32;
-const UWIDTH : usize = 512;
-const ROWLEN : usize = 2048;
-const HEIGHT : f32 = 512f32 as f32;
-const UHEIGHT : usize = 512;
+const WIDTH: f32 = 1024f32;
+const UWIDTH: usize = 1024;
+const ROWLEN: usize = 4096;
+const HEIGHT: f32 = 1024f32;
+const UHEIGHT: usize = 1024;
 
-const HRSPEED : f32 = 0.05f32 as f32;
-const VRSPEED : f32 = 0.02f32 as f32;
-const CAM2SCREEN : f32 = 2f32 as f32;
+const HRSPEED: f32 = 0.05f32;
+const VRSPEED: f32 = 0.02f32;
+const CAM2SCREEN: f32 = 2f32;
 
 struct Base {
     origin: Vector,
@@ -49,7 +48,10 @@ impl Perspective {
         Perspective {
             base: Base::new(),
             center: Vector::new(0.5f32, 0.5f32),
-            angles: (15f32 * std::f32::consts::FRAC_PI_8, std::f32::consts::FRAC_PI_6),
+            angles: (
+                15f32 * std::f32::consts::FRAC_PI_8,
+                std::f32::consts::FRAC_PI_6,
+            ),
             dist: 1f32,
             stretch: 0.25f32,
         }
@@ -66,7 +68,8 @@ struct FdfMap {
 }
 
 unsafe fn place_pixel(buf: &mut Vec<u8>, pos: usize, color: &[u8]) {
-    buf.get_unchecked_mut(pos..pos+4).clone_from_slice(&color[..4]);
+    buf.get_unchecked_mut(pos..pos + 4)
+        .clone_from_slice(&color[..4]);
 }
 
 fn clear_buf(buf: &mut Vec<u8>) {
@@ -79,7 +82,7 @@ fn fix_point(p: &mut (i32, i32), m: f32, width: i32, height: i32) {
     let xshift = if p.0 < 1 {
         1 - p.0
     } else if p.0 > width - 2 {
-        width - p.0 - 2 
+        width - p.0 - 2
     } else {
         0
     };
@@ -96,18 +99,22 @@ fn fix_point(p: &mut (i32, i32), m: f32, width: i32, height: i32) {
     p.0 += f32::round((yshift as f32) / m) as i32;
 }
 
-fn place_line(mut p1: (i32, i32), mut p2: (i32, i32),
-              c1: &[u8; 4], c2: &[u8; 4], buf: &mut Vec<u8>) {
-    if (p1.0 < 0 || p1.0 >= UWIDTH as i32 ||
-        p1.1 < 0 || p1.1 >= UHEIGHT as i32) &&
-        (p2.0 < 0 || p2.0 >= UWIDTH as i32 ||
-        p2.1 < 0 || p2.1 >= UHEIGHT as i32) {
-            return ; // Both points are offscreen, just ignore them
+fn place_line(
+    mut p1: (i32, i32),
+    mut p2: (i32, i32),
+    c1: &[u8; 4],
+    c2: &[u8; 4],
+    buf: &mut Vec<u8>,
+) {
+    if (p1.0 < 0 || p1.0 >= UWIDTH as i32 || p1.1 < 0 || p1.1 >= UHEIGHT as i32)
+        && (p2.0 < 0 || p2.0 >= UWIDTH as i32 || p2.1 < 0 || p2.1 >= UHEIGHT as i32)
+    {
+        return; // Both points are offscreen, just ignore them
     }
     match (p1.0 == p2.0, p1.1 == p2.1) {
         (true, _) => {
             if p1.0 < 0 || p1.0 >= UWIDTH as i32 {
-                return ;
+                return;
             }
             let y1 = 0.max(((UHEIGHT - 1) as i32).min(p1.1)) as usize;
             let y2 = 0.max(((UHEIGHT - 1) as i32).min(p2.1)) as usize;
@@ -115,9 +122,14 @@ fn place_line(mut p1: (i32, i32), mut p2: (i32, i32),
                 let mut pos = 4 * (y1 * UWIDTH + (p1.0 as usize));
                 unsafe {
                     for y in y1..y2 {
-                        let color: Vec<u8> = c1.iter().zip(c2.iter())
-                                                .map(|(&v1, &v2)| ((usize::from(v1) * (y - y1) + usize::from(v2) * (y2 - y)) / (y2 - y1)) as u8)
-                                                .collect();
+                        let color: Vec<u8> = c1
+                            .iter()
+                            .zip(c2.iter())
+                            .map(|(&v1, &v2)| {
+                                ((usize::from(v1) * (y - y1) + usize::from(v2) * (y2 - y))
+                                    / (y2 - y1)) as u8
+                            })
+                            .collect();
                         place_pixel(buf, pos, &color);
                         pos += ROWLEN;
                     }
@@ -126,18 +138,23 @@ fn place_line(mut p1: (i32, i32), mut p2: (i32, i32),
                 let mut pos = 4 * (y2 * UWIDTH + (p1.0 as usize));
                 unsafe {
                     for y in y2..y1 {
-                        let color: Vec<u8> = c1.iter().zip(c2.iter())
-                                                .map(|(&v1, &v2)| ((usize::from(v2) * (y - y2) + usize::from(v1) * (y1 - y)) / (y1 - y2)) as u8)
-                                                .collect();
+                        let color: Vec<u8> = c1
+                            .iter()
+                            .zip(c2.iter())
+                            .map(|(&v1, &v2)| {
+                                ((usize::from(v2) * (y - y2) + usize::from(v1) * (y1 - y))
+                                    / (y1 - y2)) as u8
+                            })
+                            .collect();
                         place_pixel(buf, pos, &color);
                         pos += ROWLEN;
                     }
                 }
             }
-        },
+        }
         (_, true) => {
             if p1.1 < 0 || p1.1 >= UHEIGHT as i32 {
-                return ;
+                return;
             }
             let x1 = 0.max(((UWIDTH - 1) as i32).min(p1.0)) as usize;
             let x2 = 0.max(((UWIDTH - 1) as i32).min(p2.0)) as usize;
@@ -145,9 +162,14 @@ fn place_line(mut p1: (i32, i32), mut p2: (i32, i32),
                 let mut pos = 4 * ((p1.1 as usize) * UWIDTH + x1);
                 unsafe {
                     for x in x1..x2 {
-                        let color: Vec<u8> = c1.iter().zip(c2.iter())
-                                                .map(|(&v1, &v2)| ((usize::from(v1) * (x - x1) + usize::from(v2) * (x2 - x)) / (x2 - x1)) as u8)
-                                                .collect();
+                        let color: Vec<u8> = c1
+                            .iter()
+                            .zip(c2.iter())
+                            .map(|(&v1, &v2)| {
+                                ((usize::from(v1) * (x - x1) + usize::from(v2) * (x2 - x))
+                                    / (x2 - x1)) as u8
+                            })
+                            .collect();
                         place_pixel(buf, pos, &color);
                         pos += 4;
                     }
@@ -156,15 +178,20 @@ fn place_line(mut p1: (i32, i32), mut p2: (i32, i32),
                 let mut pos = 4 * ((p1.1 as usize) * UWIDTH + x2);
                 unsafe {
                     for x in x2..x1 {
-                        let color: Vec<u8> = c1.iter().zip(c2.iter())
-                                                .map(|(&v1, &v2)| ((usize::from(v2) * (x - x2) + usize::from(v1) * (x1 - x)) / (x1 - x2)) as u8)
-                                                .collect();
+                        let color: Vec<u8> = c1
+                            .iter()
+                            .zip(c2.iter())
+                            .map(|(&v1, &v2)| {
+                                ((usize::from(v2) * (x - x2) + usize::from(v1) * (x1 - x))
+                                    / (x1 - x2)) as u8
+                            })
+                            .collect();
                         place_pixel(buf, pos, &color);
                         pos += 4;
                     }
                 }
             }
-        },
+        }
         _ => {
             let m = ((p2.1 - p1.1) as f32) / ((p2.0 - p1.0) as f32);
             fix_point(&mut p1, m, UWIDTH as i32, UHEIGHT as i32);
@@ -177,10 +204,17 @@ fn place_line(mut p1: (i32, i32), mut p2: (i32, i32),
             unsafe {
                 for inc in 0..=count {
                     let fraction = (inc as f32) / (count as f32);
-                    let color: Vec<u8> = c1.iter().zip(c2.iter())
-                                            .map(|(&v1, &v2)| ((v1 as f32) * fraction + (v2 as f32) * (1f32 - fraction)) as u8)
-                                            .collect();
-                    let pos = (f32::round(v0 + fraction * vrange) * WIDTH + f32::round(u0 + fraction * urange)) as usize * 4;
+                    let color: Vec<u8> = c1
+                        .iter()
+                        .zip(c2.iter())
+                        .map(|(&v1, &v2)| {
+                            ((v1 as f32) * fraction + (v2 as f32) * (1f32 - fraction)) as u8
+                        })
+                        .collect();
+                    let pos = (f32::round(v0 + fraction * vrange) * WIDTH
+                        + f32::round(u0 + fraction * urange))
+                        as usize
+                        * 4;
                     place_pixel(buf, pos, &color);
                 }
             }
@@ -199,11 +233,13 @@ impl FdfMap {
             let fy = self.settings.center.y - (y as f32) / height;
             let theta = self.settings.angles.0;
             let phi = self.settings.angles.1;
-            let k = 1f32 + ((fx * theta.sin() + fy * theta.cos()) *
-                    phi.cos() + self.settings.dist) / CAM2SCREEN;
+            let k = 1f32
+                + ((fx * theta.sin() + fy * theta.cos()) * phi.cos() + self.settings.dist)
+                    / CAM2SCREEN;
             let w_shift = (fx * theta.cos() - fy * theta.sin()) / k;
-            let h_shift = ((fx * theta.sin() + fy * theta.cos()) * phi.sin() +
-                          z * self.settings.stretch * phi.cos()) / k;
+            let h_shift = ((fx * theta.sin() + fy * theta.cos()) * phi.sin()
+                + z * self.settings.stretch * phi.cos())
+                / k;
             let u = (WIDTH * (0.5f32 + 0.8f32 * w_shift)) as i32;
             let v = (HEIGHT * (0.5f32 - 0.8f32 * h_shift)) as i32;
             let red = (80f32 * (1.2f32 - z)) as u8;
@@ -226,11 +262,27 @@ impl FdfMap {
         clear_buf(&mut self.img_buffer);
         for (i, (&p1, &p2)) in points.iter().zip(points.iter().skip(1)).enumerate() {
             if (i + 1) % self.width != 0 {
-                place_line(p1, p2, &self.colors[i + 1], &self.colors[i], &mut self.img_buffer);
+                place_line(
+                    p1,
+                    p2,
+                    &self.colors[i + 1],
+                    &self.colors[i],
+                    &mut self.img_buffer,
+                );
             }
         }
-        for (i, (&p1, &p2)) in points.iter().zip(points.iter().skip(self.width)).enumerate() {
-            place_line(p1, p2, &self.colors[i + self.width], &self.colors[i], &mut self.img_buffer);
+        for (i, (&p1, &p2)) in points
+            .iter()
+            .zip(points.iter().skip(self.width))
+            .enumerate()
+        {
+            place_line(
+                p1,
+                p2,
+                &self.colors[i + self.width],
+                &self.colors[i],
+                &mut self.img_buffer,
+            );
         }
     }
 }
@@ -256,10 +308,18 @@ fn fdf_parse(rect: String) -> FdfMap {
     let mut width = None;
     let mut points = Vec::new();
     for (i, line) in rect.lines().enumerate() {
-        let row: Vec<f32> = line.split_whitespace().map(|x| x.parse::<f32>().expect("Not a valid float")).collect();
+        let row: Vec<f32> = line
+            .split_whitespace()
+            .map(|x| x.parse::<f32>().expect("Not a valid float"))
+            .collect();
         if let Some(w) = width {
             if w != row.len() {
-                panic!("Invalid rectangle: row {} has length {} instead of {}", i, row.len(), w);
+                panic!(
+                    "Invalid rectangle: row {} has length {} instead of {}",
+                    i,
+                    row.len(),
+                    w
+                );
             }
         } else {
             width = Some(row.len());
@@ -293,9 +353,13 @@ fn fdf_parse(rect: String) -> FdfMap {
 
 impl State for FDF {
     fn new() -> Result<FDF> {
-        let fdf_map = Asset::new(load_file("crgl.fdf")
-            .and_then(|contents| ok(String::from_utf8(contents).expect("The file must be UTF-8")))
-            .and_then(|rect| ok(fdf_parse(rect))));
+        let fdf_map = Asset::new(
+            load_file("crgl.fdf")
+                .and_then(|contents| {
+                    ok(String::from_utf8(contents).expect("The file must be UTF-8"))
+                })
+                .and_then(|rect| ok(fdf_parse(rect))),
+        );
         Ok(FDF { fdf_map })
     }
 
@@ -308,11 +372,20 @@ impl State for FDF {
             let settings = &mut fdf_map.settings;
             if mouse[MouseButton::Left].is_down() {
                 if keyboard[Key::LShift].is_down() || keyboard[Key::RShift].is_down() {
-                    settings.dist = f32::max(settings.base.dist + (mouse.pos().y - settings.base.origin.y) / HEIGHT, 0.1f32);
+                    settings.dist = f32::max(
+                        settings.base.dist + (mouse.pos().y - settings.base.origin.y) / HEIGHT,
+                        0.1f32,
+                    );
                 } else if keyboard[Key::LControl].is_down() || keyboard[Key::RControl].is_down() {
-                    settings.stretch = settings.base.stretch + (mouse.pos().y - settings.base.origin.y) / HEIGHT;
+                    settings.stretch =
+                        settings.base.stretch + (mouse.pos().y - settings.base.origin.y) / HEIGHT;
                 } else {
-                    settings.center = (settings.base.center + Vector::new((mouse.pos().x - settings.base.origin.x) / WIDTH, (mouse.pos().y - settings.base.origin.y) / HEIGHT)).clamp(bottom_left, top_right);
+                    settings.center = (settings.base.center
+                        + Vector::new(
+                            (mouse.pos().x - settings.base.origin.x) / WIDTH,
+                            (mouse.pos().y - settings.base.origin.y) / HEIGHT,
+                        ))
+                    .clamp(bottom_left, top_right);
                 }
             }
             let pi_two = std::f32::consts::FRAC_PI_2;
@@ -346,8 +419,8 @@ impl State for FDF {
     }
 
     fn event(&mut self, event: &Event, window: &mut Window) -> Result<()> {
-        use MouseButton::*;
         use ButtonState::*;
+        use MouseButton::*;
 
         self.fdf_map.execute(|fdf_map| {
             if let Event::MouseButton(Left, Pressed) = event {
@@ -368,8 +441,16 @@ impl State for FDF {
         self.fdf_map.execute(|fdf_map| {
             window.clear(Color::BLACK)?;
             fdf_map.update();
-            let image = Image::from_raw(&fdf_map.img_buffer, UWIDTH as u32, UHEIGHT as u32, PixelFormat::RGBA)?;
-            window.draw(&image.area().with_center((WIDTH / 2., HEIGHT / 2.)), Img(&image));
+            let image = Image::from_raw(
+                &fdf_map.img_buffer,
+                UWIDTH as u32,
+                UHEIGHT as u32,
+                PixelFormat::RGBA,
+            )?;
+            window.draw(
+                &image.area().with_center((WIDTH / 2., HEIGHT / 2.)),
+                Img(&image),
+            );
             Ok(())
         })
     }
